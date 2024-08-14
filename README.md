@@ -35,14 +35,12 @@ Given the current architecture, it would be relatively straightforward to create
 
 ## Project Structure
 
-- **/Lie_Detection_Protocol_Model/**: Contains the business logic and data structures for the experiment.
-- **/Lie_Detection_Protocol_View/**: Handles the user interface and data presentation.
-- **/Lie_Detection_Protocol_Controller/**: Manages the interactions between the Model and View components.
-- **/Data_Processing/**: Contains scripts and tools for processing and analyzing experiment data.
-  - **Preprocessing.py**: Class for data extraction and preparation.
-  - **Classifier.py**: Class for feature extraction and data classification.
-  - **Processing.py**: Class for final data analysis and visualization.
-- **main.py**: The main entry point of the application.
-- **xdf2fif.py**: A script to convert `.xdf` files to `.fif` format.
-
-
+- **Lie_Detection_Protocol_Model:** Contains the business logic and data structures for the experiment.
+- **Lie_Detection_Protocol_View:** Handles the user interface and data presentation.
+- **Lie_Detection_Protocol_Controller:** Manages the interactions between the Model and View components.
+- **Data_Processing:** Contains scripts and tools for processing and analyzing experiment data.
+  - **Preprocessing:** Class for data extraction and preparation.
+  - **Classifier:** Class for feature extraction and data classification.
+  - **Processing:** Class for final data analysis and visualization.
+- **Lie_Detection_Protocol.py:** The main entry point of the application.
+- **xdf2fif.py:** A script to convert `.xdf` files to `.fif` format.
