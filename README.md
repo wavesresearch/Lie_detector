@@ -29,6 +29,10 @@ This application is designed to manage and process scientific experiments relate
    - **Processing:**  
      The Processing class is responsible for final data analysis and visualization. For example, it includes methods for source localization of brain activity, enabling visualization of brain regions activated during different stages of the experiment.
 
+## Future Development
+
+Given the current architecture, it would be relatively straightforward to create an online version of this application. In future iterations, the **Classifier** could be integrated directly with the **Experiment Module** to provide real-time feedback. This enhancement would allow the system to instantly detect and report whether the participant is lying or telling the truth during the experiment.
+
 ## Project Structure
 
 - **/Lie_Detection_Protocol_Model/**: Contains the business logic and data structures for the experiment.
