@@ -27,14 +27,20 @@ import time
 import logging
 
 class EEGPreProcessor:
+    """
+    This class is used to collect information from the experiment (.fif), create epochs and the perform a preprocessing (filter, asr, remove bads channel) to obtain the final data that will be used for classification
+    """
+
+
     def __init__(self,raw_fnames):
         self.epochs_combined = None
         self.raw_fnames = raw_fnames
         self.event_id = dict(lie=50, true=51)
-        self.tmin, self.tmax = 0.0, 1.0
+        self.tmin, self.tmax = 0.0, 1.0 #min and max time to create the epochs
         self.baseline = (None, 0.5)
         self.reject = dict(eeg=150e-6)
-        self.extract_raw_data(0,0)
+
+        self.extract_raw_data(0,0) #extract the raw_data with any preprocessing and any region of interest
         mne.set_log_level(logging.WARNING)
         self.processing()        
 
@@ -50,8 +56,7 @@ class EEGPreProcessor:
             ch_names=['F3','FC5','T7','C3','CP5','TP9', 'P5','P6', 'PO3', 'POz', 'AFz', 'Fz', 'Cz', 'FC1', 'FC2', 'P1', 'Pz', 'P2', 'PO4', 'O1', 'Oz', 'O2', 'F4', 'FC6', 'T8', 'C4', 'CP1', 'CP2', 'CP6', 'TP10', 'PO7', 'PO8']
             self.channel_of_interest = ['CP5'] 
 
-            # Sélection des canaux spécifiques
-            raw_picks = raw.pick_channels(self.channel_of_interest)
+            raw_picks = raw.pick_channels(ch_names) # don't forget to remove "stim" channel were all the information (markers) is contained
 
             # sample = raw.get_data()
             # sample = sample[:-1]
@@ -63,10 +68,12 @@ class EEGPreProcessor:
             
             if val_preprocessing == 1 :
 
-                raw.filter(l_freq=0.5, h_freq=45.0)
+                raw.filter(l_freq=0.5, h_freq=45.0) #classic filter for EEG data
             
-                # raw.info['bads'] = ['T8','TP10'] 
-                # raw.interpolate_bads(reset_bads=True)
+                raw.info['bads'] = ['T8','TP10'] 
+                raw.interpolate_bads(reset_bads=True)
+
+                #We can choose betwen asr and ica preprocessing, most of the time, asr is better
 
                 asr = asrpy.ASR(sfreq=raw.info["sfreq"], cutoff = 20)
                 asr.fit(raw)
@@ -76,40 +83,38 @@ class EEGPreProcessor:
                 # ica.fit(raw)
                 # ica.apply(raw)
 
-            if val_ROI:  # Vérifie si val_ROI est True
+            if val_ROI:  # Check if val ROI is true 
 
-                sfreq = raw.info['sfreq']  # fréquence d'échantillonnage
-                n_channels = self.data_rsc.shape[0]  # nombre de canaux (vertices dans la ROI)
-                ch_names = [f'RSC_{i}' for i in range(n_channels)]  # Noms des canaux personnalisés
+                sfreq = raw.info['sfreq']  # Sampling frequency
+                n_channels = self.data_rsc.shape[0]  # Number of channels (vertices in the ROI)
+                ch_names = [f'RSC_{i}' for i in range(n_channels)]  # Custom channel names
 
                 info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types='eeg')
 
-                # Vérifiez que self.data_rsc n'est pas vidpipe et a les dimensions correctes
+                # Check that self.data_rsc is not empty and has the correct dimensions
                 if self.data_rsc is None or self.data_rsc.shape[0] == 0:
                     raise ValueError("self.data_rsc is empty or not properly formatted")
 
-                # Créez un nouvel objet RawArray avec les données de la ROI et les 'times' synchronisés
+                # Create a new RawArray object with the ROI data and synchronized 'times'
                 raw_rsc = mne.io.RawArray(self.data_rsc, info, copy=None, verbose=None)
                 print(f"Created RawArray with {len(raw_rsc.info['ch_names'])} channels and sampling frequency {sfreq}")
 
-                # Vérifiez que raw_rsc a été correctement créé
+                # Check that raw_rsc was properly created
                 if raw_rsc is None or len(raw_rsc.info['ch_names']) == 0:
                     raise ValueError("raw_rsc is empty or not properly created")
 
-                # Trouvez les événements dans raw_rsc
+                # Find events in raw_rsc
                 events_rsc = mne.find_events(raw)
                 print("Events found in raw_rsc:")
                 print(events_rsc)
 
-                # Créer des epochs pour la région d'intérêt
+                # Create epochs for the region of interest
                 epochs_rsc = mne.Epochs(
                     raw_rsc, events_rsc, self.event_id, tmin=self.tmin, tmax=self.tmax, proj=True, baseline=self.baseline, reject=None, preload=True
                 )
-                print(f"Created epochs with {epochs_rsc.info['nchan']} channels")
 
-                # Vérifiez que les epochs ont été correctement créées
+                # Check that the epochs were properly created
                 if len(epochs_rsc) == 0:
-                    print("Warning: All epochs were dropped!")
                     epochs_rsc.plot_drop_log()
 
                 self.raws.append(raw_rsc)
@@ -119,25 +124,31 @@ class EEGPreProcessor:
                 events =mne.pick_events(events, include=[self.event_id['true'],self.event_id['lie']]) 
                 epochs = mne.Epochs(raw, events, self.event_id, self.tmin, self.tmax, proj=True, baseline=self.baseline, reject=None, preload=True)
                 
+                #create global raws and epochs with all files (.fif)
                 self.raws.append(raw)
                 self.all_epochs.append(epochs)
 
-        # Vérifiez le nombre de canaux pour chaque raw ajouté
+       # Check the number of channels for each raw added
         for i, raw in enumerate(self.raws):
             print(f"Raw {i} has {len(raw.info['ch_names'])} channels")
 
-        # Vérifiez le nombre de canaux pour chaque epochs ajouté
+        # Check the number of channels for each set of epochs added
         for i, epochs in enumerate(self.all_epochs):
             print(f"Epochs {i} has {epochs.info['nchan']} channels")
 
-                
+        # Final data without time truncation
         self.raw_combined = mne.concatenate_raws(self.raws)
-        print("nombre de raw total : ", len(self.raw_combined))
+        print("Total number of raws: ", len(self.raw_combined))
+
+        # Final epochs with time truncation
         self.epochs_combined = mne.concatenate_epochs(self.all_epochs)
-        print("nombre d'epochs total : ", len(self.epochs_combined))
+        print("Total number of epochs: ", len(self.epochs_combined))
 
 
     def processing(self):
+        """
+        Function who preprocess and display the raw data before and after this step
+        """
 
         fig, axs = plt.subplots(2,2, figsize=(12, 16))
         fig.suptitle(f'Preprocessing Signals', fontsize=16)
@@ -149,19 +160,24 @@ class EEGPreProcessor:
         self.display_raw_data("After processing", axs[1, 0], axs[1, 1])
         val_preprocessing = 0 
 
+
     def time_frequency_display(self, epochs):
-        freqs = np.arange(2, 36)  # fréquences de 2 à 35 Hz
-        vmin, vmax = -1, 1.5  # valeurs min et max pour les ERDS dans le plot
-        baseline = (0, 0.5)  # intervalle de baseline (en s)
-        cnorm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)  # min, centre et max pour ERDS
+        """
+        Display the time frequency reprezentation with a tfr 
+        """
 
-        tmin, tmax = -1, 4  # intervalle de temps pour l'analyse
+        freqs = np.arange(2, 36)  # Frequencies from 2 to 35 Hz
+        vmin, vmax = -1, 1.5  # Min and max values for ERDS in the plot
+        baseline = (0, 0.5)  # Baseline interval (in seconds)
+        cnorm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)  # Min, center, and max for ERDS normalization
 
-        # Sélectionner les canaux d'intérêt
-        # epochs = epochs.pick(['CP6','CP5'])
-        epochs =  epochs.pick(self.channel_of_interest)
-        
-        # Calculer le TFR pour chaque epoch
+        tmin, tmax = -1, 4  # Time interval for the analysis
+
+        # Select the channels of interest
+        # epochs = epochs.pick(['CP6', 'CP5'])
+        epochs = epochs.pick(self.channel_of_interest)
+
+        # Compute the TFR for each epoch
         tfr = mne.time_frequency.tfr_multitaper(
             epochs,
             freqs=freqs,
@@ -171,37 +187,40 @@ class EEGPreProcessor:
             average=False,
             decim=2,
         )
-        
-        # Appliquer la baseline
+
+        # Apply the baseline correction
         tfr.crop(tmin, tmax).apply_baseline(baseline, mode="percent")
-        
-        # Calculer la moyenne des TFR
+
+        # Compute the average TFR
         tfr_mean = tfr.average()
-        
-        # Afficher la moyenne des PSD
+
+        # Plot the average PSD
         fig, axes = plt.subplots(1, 3, figsize=(12, 4), gridspec_kw={"width_ratios": [10, 10, 1]})
-        for ch, ax in enumerate(axes[:-1]):  # pour chaque canal
+        for ch, ax in enumerate(axes[:-1]):  # For each channel
             tfr_mean.plot([ch], cmap="RdBu_r", cnorm=cnorm, axes=ax, colorbar=False, show=False)
             ax.set_title(epochs.ch_names[ch], fontsize=10)
-            ax.axvline(0, linewidth=1, color="black", linestyle=":")  # event
+            ax.axvline(0, linewidth=1, color="black", linestyle=":")  # Event marker
             if ch != 0:
                 ax.set_ylabel("")
                 ax.set_yticklabels("")
         fig.colorbar(axes[0].images[-1], cax=axes[-1]).ax.set_yscale("linear")
-        fig.suptitle(f"Moyenne des PSD {epochs} pour tous les epochs")
+        fig.suptitle(f"Average PSD for all epochs in {epochs}")
         plt.show()
 
-    def temporal_display (self): 
-   
-        # Création d'une figure
-        fig = plt.figure(figsize=(15, 12))
-        fig.suptitle('Temporal Representation of epochs', fontsize=16)
 
-        # Utilisation de gridspec pour une disposition personnalisée
+    def temporal_display (self): 
+        """
+        Display the temporal representation 
+        """
+
+        # Create a figure
+        fig = plt.figure(figsize=(15, 12))
+        fig.suptitle('Temporal Representation of Epochs', fontsize=16)
+
+        # Use gridspec for a custom layout
         gs = gridspec.GridSpec(6, 6, height_ratios=[3, 1, 3, 3, 1, 3], width_ratios=[20, 1, 20, 1, 20, 1])
 
-
-        # Définition des axes pour chaque canal
+        # Define axes for each channel
         ax_colormaps = []
         ax_colorbars = []
         ax_signals = []
@@ -213,9 +232,9 @@ class EEGPreProcessor:
             ax_colorbars.append(fig.add_subplot(gs[3, 2 * i + 1]))
             ax_signals.append(fig.add_subplot(gs[4, 2 * i:2 * i + 2]))
 
-        # Parcours des canaux
+        # Iterate over channels
         for i, channel in enumerate(self.channel_of_interest):
-            # Tracé de l'image pour les epochs de "lie" pour le canal actuel
+            # Plot the image for "lie" epochs for the current channel
             self.epochs_lie.plot_image(
                 picks=channel,
                 vmin=-10,
@@ -227,7 +246,7 @@ class EEGPreProcessor:
                 title=f'Lie - {channel}'
             )
 
-            # Tracé de l'image pour les epochs de "true" pour le canal actuel
+            # Plot the image for "true" epochs for the current channel
             self.epochs_true.plot_image(
                 picks=channel,
                 vmin=-10,
@@ -236,16 +255,19 @@ class EEGPreProcessor:
                 axes=[ax_colormaps[i * 2 + 1], ax_signals[i * 2 + 1], ax_colorbars[i * 2 + 1]],
                 colorbar=True,
                 show=False,
-                title=f' True - {channel}'
+                title=f'True - {channel}'
             )
 
-            # Ajustement de la disposition et affichage
-            plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Ajuste la disposition pour la suptitle
+            # Adjust layout and display
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust layout for the suptitle
 
-   
+        
 
 
     def frequency_display (self):
+        """
+        Display the frequencial representation 
+        """
         freqs = np.arange(1,50,1)
 
         fig, axes = plt.subplots(1,2)
@@ -261,38 +283,43 @@ class EEGPreProcessor:
 
 
     def ERN_display(self):
-        # Définir les bandes de fréquence
+        """
+        Display a special temporal representation (ERN)
+        We used 3 different band-frequency to 
+        """
+
+        # Define frequency bands
         bands = {
             'alpha': (8, 12),
             'beta': (13, 30),
             'theta': (4, 7)
         }
 
-        # Créer une figure avec trois sous-graphes pour chaque bande de fréquence
+        # Create a figure with three subplots for each frequency band
         fig, axes = plt.subplots(3, 1, figsize=(15, 10))
         fig.suptitle('Filtered EEG Epochs for Alpha, Beta, and Theta Bands')
 
         sfreq = self.epochs_lie.info['sfreq']
         times = np.arange(self.epochs_lie.get_data().shape[-1]) / sfreq
 
-        # Itérer sur chaque bande de fréquence
+        # Iterate over each frequency band
         for i, (band_name, (low_freq, high_freq)) in enumerate(bands.items()):
-            # Filtrer les données pour chaque bande
+            # Filter the data for each band
             lie_filtered = mne.filter.filter_data(
-                self.epochs_lie.get_data(),  # Utiliser les données brutes des epochs
-                sfreq=self.epochs_lie.info['sfreq'], 
-                l_freq=low_freq, 
+                self.epochs_lie.get_data(),  # Use raw data from epochs
+                sfreq=self.epochs_lie.info['sfreq'],
+                l_freq=low_freq,
                 h_freq=high_freq
             )
             
             true_filtered = mne.filter.filter_data(
-                self.epochs_true.get_data(),  # Utiliser les données brutes des epochs
-                sfreq=self.epochs_true.info['sfreq'], 
-                l_freq=low_freq, 
+                self.epochs_true.get_data(),  # Use raw data from epochs
+                sfreq=self.epochs_true.info['sfreq'],
+                l_freq=low_freq,
                 h_freq=high_freq
             )
             
-            # Tracer les données filtrées pour chaque epoch
+            # Plot the filtered data for each epoch
             for epoch in range(lie_filtered.shape[0]):
                 axes[i].plot(times, lie_filtered.T, color='red', alpha=0.5)
                 axes[i].plot(times, true_filtered.T, color='blue', alpha=0.5)
@@ -301,14 +328,18 @@ class EEGPreProcessor:
             axes[i].set_xlabel('Time (samples)')
             axes[i].set_ylabel('Amplitude')
 
-        # Afficher la légende
+        # Display the legend
         handles, labels = axes[-1].get_legend_handles_labels()
         axes[-1].legend(handles, ['epochs_lie', 'epochs_true'], loc='upper right')
 
         plt.tight_layout()
         plt.show()
 
+
     def visualize_data(self):
+        """
+        Function who call the other "display function"
+        """
         eeg_preprocessor.ERN_display()
         eeg_preprocessor.temporal_display()
         eeg_preprocessor.frequency_display()
@@ -316,47 +347,51 @@ class EEGPreProcessor:
         eeg_preprocessor.time_frequency_display(self.epochs_true)
 
     def choose_ROI(self):
+        """
+        Function that recreates the epochs_combined but instead of using information from all 32 channels, it extracts information from the desired brain regions.
+        """
 
-        source = self.epochs_combined
+        source = self.epochs_combined 
 
-        subjects_dir = 'C:/Users/andresfs/mne_data/MNE-sample-data/subjects'
+        subjects_dir = 'C:/Users/andresfs/mne_data/MNE-sample-data/subjects'  # Correct path if working on the BrainKybLab computer
         subject_name = "fsaverage"
 
-        # Référencer l'EEG
+        # Reference the EEG
         montage = mne.channels.make_standard_montage('standard_1005')
         source.set_montage(montage)
         source.set_eeg_reference('average', projection=True)
 
-        # Calculer la covariance de bruit
+        # Compute noise covariance
         noise_cov = mne.make_ad_hoc_cov(source.info)
 
         mne.datasets.fetch_fsaverage(subjects_dir=subjects_dir)
 
-        # Charger le modèle BEM
+        # Load BEM model
         bem = mne.read_bem_solution('C:/Users/andresfs/mne_data/MNE-sample-data/subjects/fsaverage/bem/fsaverage-5120-5120-5120-bem-sol.fif')
 
-        # Configurer l'espace source
+        # Set up the source space
         src = mne.setup_source_space("fsaverage", spacing="oct6", add_dist="patch", subjects_dir=subjects_dir)
 
-        # Calculer la solution directe (forward solution)
+        # Compute the forward solution
         fwd = mne.make_forward_solution(source.info, trans="fsaverage", src=src, bem=bem, meg=False, eeg=True, mindist=5.0, n_jobs=None, verbose=False)
 
-        # Calculer l'opérateur inverse
+        # Compute the inverse operator
         inverse_operator = mne.minimum_norm.make_inverse_operator(source.info, fwd, noise_cov, loose=0.2, depth=0.8)
 
-        # Appliquer l'inverse
+        # Apply the inverse operator
         method = "sLORETA"
         snr = 3.0
         lambda2 = 1.0 / snr ** 2
         stc = apply_inverse_epochs(source, inverse_operator, lambda2, method=method, pick_ori=None, verbose=True)
 
-        # Charger les labels FreeSurfer
+        # Load FreeSurfer labels
         labels = mne.read_labels_from_annot(subject=subject_name, parc='aparc.a2009s', subjects_dir=subjects_dir)
 
         for label in labels: 
-            print("label name : ", label.name)
+            print("Label name:", label.name)
 
-        # Spécifier les numéros de labels d'intérêt
+        # Specify numbers of labels of interest
+        # The regions found to be the most interesting 
         label_numbers = [
             7080,
             7828,
@@ -386,26 +421,30 @@ class EEGPreProcessor:
             6734,
         ]
 
-        # Filtrer pour trouver les labels avec les numéros spécifiés
+        # Filter to find labels with the specified numbers
         rsc_label = [label for label in labels if any(vertex in label.vertices for vertex in label_numbers)]
 
         if not rsc_label:
             raise ValueError("No label matching the specified numbers found in the annotation.")
 
-        # Restreindre les données aux labels spécifiés
+        # Restrict data to the specified labels
         vertices_rsc = np.concatenate([label.vertices for label in rsc_label])
 
         self.data_rsc = []
 
         for stc_epoch in stc:
+            # stc_rsc = stc_epoch  # if you want all sources
             stc_rsc = stc_epoch.in_label(rsc_label[0])
-            # Extraire les données de la région d'intérêt
+            # Extract data from the region of interest
             self.data_rsc.append(stc_rsc.data)
 
-        print("size of data_rsc", np.shape(self.data_rsc))
+        print("Size of data_rsc:", np.shape(self.data_rsc))
 
 
     def normalisation(self,X) : 
+        """
+        Function who normalized the data
+        """
 
         self.Xmoy = np.mean(X,axis=1, keepdims=True)
         self.Xstd = np.std(X,axis=1, keepdims= True)
@@ -415,6 +454,9 @@ class EEGPreProcessor:
     
 
     def display_raw_data(self, subtitle, ax_psd, ax_evoked):
+        """
+        Function that displays a temporal representation of raw data with mean and variance.
+        """
         if 'lie' in self.epochs_combined.event_id:
             self.epochs_lie = self.epochs_combined['lie']
         else:
@@ -428,8 +470,8 @@ class EEGPreProcessor:
             return
 
         print("-------------------------------------------------------------------------------------------------------------------------------")
-        print("le nombre d'epochs lie est de :", len(self.epochs_lie))
-        print("le nombre d'epochs true est de :", len(self.epochs_true))
+        print("The number of 'lie' epochs is:", len(self.epochs_lie))
+        print("The number of 'true' epochs is:", len(self.epochs_true))
         print("-------------------------------------------------------------------------------------------------------------------------------")
 
         ax_psd.set_title(f'{subtitle} - PSD')
@@ -444,28 +486,23 @@ class EEGPreProcessor:
             else:
                 line.set_color('blue')
 
-        # Récupération des données pour toutes les epochs
+        # Retrieve data for all epochs
         data_lie = self.epochs_lie.get_data()
         data_true = self.epochs_true.get_data()
 
-        times = self.epochs_lie.times  # Les temps sont les mêmes pour toutes les epochs
+        times = self.epochs_lie.times  # Times are the same for all epochs
 
         channel_index = 0  
 
-        # for epoch_data in data_lie:
-        #     ax_evoked.plot(times, epoch_data[:,channel_index], color='red', alpha=0.3)
-        # for epoch_data in data_true:
-        #     ax_evoked.plot(times, epoch_data[:,channel_index], color='blue', alpha=0.3)
-
-        # Calcul de la moyenne et de l'incertitude pour les tracés remplis (facultatif)
+        # Calculate the mean and uncertainty for the filled plots (optional)
         evoked_lie = self.epochs_lie.average()
         evoked_true = self.epochs_true.average()
 
         data_to_plot_lie = evoked_lie.data[channel_index]
         data_to_plot_true = evoked_true.data[channel_index]
-        
+
         ax_evoked.plot(times, data_to_plot_lie, color='red', label='lie')
-        ax_evoked.plot(times,data_to_plot_true, color='blue', label='true')
+        ax_evoked.plot(times, data_to_plot_true, color='blue', label='true')
 
         std_lie = np.std(data_lie, axis=0)
         std_true = np.std(data_true, axis=0)
@@ -479,7 +516,13 @@ class EEGPreProcessor:
         ax_evoked.set_title(f'{subtitle} - Evoked')
         ax_evoked.legend()
 
+
 class EEGClassifier:
+
+    """
+    Function who extract temporal and frequential features from the preprocessed data.
+    It then uses these features to classify the data using machine learning 
+    """
 
     def __init__(self,epochs_combined):
         self.tmin, self.tmax = 0, 1.0
@@ -491,6 +534,9 @@ class EEGClassifier:
         self.features = None
               
     def extract_temporal_features(self, X):
+        """
+        Function who return the temporal features
+        """
 
         print("Temporal features extraction ...")
 
@@ -536,6 +582,9 @@ class EEGClassifier:
         return np.array(features)
 
     def extract_frequencial_features(self, X):
+        """
+        Function who return the frequencial features
+        """
 
         print("Frequencial features extraction ...")
 
@@ -543,12 +592,6 @@ class EEGClassifier:
         nb_intervals = 6
         points = np.linspace(self.tmin, self.tmax, nb_intervals + 1)
         regions = [(points[i], points[i + 1]) for i in range(len(points) - 1)]
-
-        """
-            'delta': (1, 4),
-            'theta': (4, 8),
-            'alpha': (8, 13),
-        """
 
         bands = {
             'delta': (1, 4),
@@ -585,12 +628,17 @@ class EEGClassifier:
         return np.array(features)
 
     def feature_extraction(self, val_ROI):
+        """
+        Function to extract temporal and frequency features.
+        """
+
+        # Choose whether to extract features from the classic data or ROI (Source localization) data
         if val_ROI:
             X = self.data_rsc
         else:
             X = self.epochs_combined.get_data()
 
-        print("Nombre de données pour la classification : ", len(X))
+        print("Number of data points for classification:", len(X))
 
         temporal_features = self.extract_temporal_features(X)
         frequencial_features = self.extract_frequencial_features(X)
@@ -600,16 +648,21 @@ class EEGClassifier:
         self.features = np.hstack([self.temporal_features, self.frequencial_features])
         self.feature_names = np.hstack([self.temporal_feature_names, self.frequencial_feature_names])
 
-        print("Nombre de features temporelles : ", temporal_features.shape)
-        print("Nombre de features fréquentielles : ", frequencial_features.shape)
+        print("Number of temporal features:", temporal_features.shape)
+        print("Number of frequency features:", frequencial_features.shape)
 
         self.labels = self.epochs_combined.events[:, -1] == self.event_id['true']
 
-        print("Nombre de labels :", len(self.labels))
-        print("Nombre de True :", np.sum(self.labels))
-        print("Nombre de Lie :", len(self.labels) - np.sum(self.labels))
+        print("Number of labels:", len(self.labels))
+        print("Number of 'True' labels:", np.sum(self.labels))
+        print("Number of 'Lie' labels:", len(self.labels) - np.sum(self.labels))
+
 
     def classification(self, features, feature_names, feature_type):
+        """
+        Function that classifies data according to extracted features
+        """
+        
         scaler = StandardScaler()
         features = scaler.fit_transform(features)
 
@@ -643,6 +696,10 @@ class EEGClassifier:
         print(importances_df)
 
     def display_features(self, importances_df, feature_type):
+        """
+        Function that display the features importance
+        """
+
         # Create a Tkinter window
         root = tk.Tk()
         root.title(f"Feature Importances ({feature_type.capitalize()} Features)")
@@ -691,6 +748,10 @@ class EEGClassifier:
         root.mainloop()
     
     def confusion_matrix(self): 
+        """
+        Function that uses a confusion matrix for a more viable result of our accuracy
+        """
+
         skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
         selector = SelectFromModel(RandomForestClassifier(n_estimators=100))
         pipeline = make_pipeline(selector, SVC())
@@ -740,6 +801,9 @@ class EEGClassifier:
          
 
 class EEGProcessor:
+    """
+    Responsible for final data analysis and visualization
+    """
 
     def __init__(self, epochs_combined, epochs_lie, epochs_true):
         self.epochs_combined = epochs_combined
@@ -748,6 +812,9 @@ class EEGProcessor:
         mne.set_log_level(logging.WARNING)
 
     def source_localization(self, state, side):
+        """
+        Function who display the result of source localisation for a state (lie or true) and a side of the brain 
+        """
         if state == "lie": 
             info = self.epochs_lie.info 
             epochs = self.epochs_lie
@@ -835,7 +902,7 @@ class EEGProcessor:
 
 if __name__ == "__main__":
 
-
+    # All the files 
     """
     "D:/EEG_project/Dataset/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-001_eeg.fif",
     "D:/EEG_project/Dataset/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-002_eeg.fif",
@@ -851,9 +918,9 @@ if __name__ == "__main__":
 
     raw_fnames = [ 
             "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-001_eeg.fif",
-            # "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-002_eeg.fif",
-            # "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-003_eeg.fif",
-            # "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-004_eeg.fif",
+            "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-002_eeg.fif",
+            "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-003_eeg.fif",
+            "D:/EEG_project/Dataset/sub-P003/ses-S001/eeg/sub-P003_ses-S001_task-Default_run-004_eeg.fif",
      
               ]
 
@@ -869,6 +936,7 @@ if __name__ == "__main__":
     # eeg_processor.calculate_coherence()
 
 
+    # to let open the mne windows 
     fig, ax = plt.subplots()
     plt.show()
 
