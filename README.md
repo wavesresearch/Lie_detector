@@ -44,3 +44,8 @@ Given the current architecture, it would be relatively straightforward to create
   - **Processing:** Class for final data analysis and visualization.
 - **Lie_Detection_Protocol.py:** The main entry point of the application.
 - **xdf2fif.py:** A script to convert `.xdf` files to `.fif` format.
+
+
+## Internship 2025
+
+The advance of the 2025 is in the Lie_Detection_Report. Classification files allow to classify the data. You can find the LieWave Dataset in the related paper. In order to expand the dataset, use the files in the lab's computer. 
