@@ -12,9 +12,13 @@ class Model(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self.symbols_pathnames = ["src/dog.png", "src/axe.png", "src/aircraft.png", "src/battery.png", "src/brain.png",
-                                  "src/phone.png",
-                                  "src/fish.png", "src/sun.png", "src/tree.png", "src/wave.png"]
+        images_dir = "C:/Users/user/Documents/BrainKybLab/Lab Protocols/Lie_detector/Lie_detector_Quentin/color_image_bank" 
+       
+        self.symbols_pathnames = [
+            os.path.join(images_dir, f)
+            for f in os.listdir(images_dir)
+            if f.endswith(".png") and not f.startswith("._") ]
+        
         self.flag_touch_select = 0 
         
         
@@ -30,13 +34,13 @@ class Model(QObject):
         self.flag_touch_select = 1
         if self.current_image == self.image1 :
             #print("YOU SAY THE TRUTH")
-            self.mrkstream.push_sample(pylsl.vectorstr(str(self.MARKER_TRUTH)))
+            self.mrkstream.push_sample([str(self.MARKER_LIE)])
             print("Emitting the Marker TRUE on the lsl")
 
 
         elif self.current_image != self.image1 :
             #print("YOU LIE")
-            self.mrkstream.push_sample(pylsl.vectorstr(str(self.MARKER_LIE)))
+            self.mrkstream.push_sample([str(self.MARKER_LIE)])
             print("Emitting the Marker LIE on the lsl")
 
 
@@ -45,13 +49,13 @@ class Model(QObject):
         self.flag_touch_select = 1
         if self.current_image == self.image2 :
             #print("YOU SAY THE TRUTH")
-            self.mrkstream.push_sample(pylsl.vectorstr(str(self.MARKER_TRUTH)))
+            self.mrkstream.push_sample([str(self.MARKER_LIE)])
             print("Emitting the Marker TRUE on the lsl")
 
 
         elif self.current_image != self.image2 : 
             #print("YOU LIE")
-            self.mrkstream.push_sample(pylsl.vectorstr(str(self.MARKER_LIE)))
+            self.mrkstream.push_sample([str(self.MARKER_LIE)])
             print("Emitting the Marker LIE on the lsl")
 
 

@@ -3,6 +3,8 @@ from PySide2.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QWidget, QHBoxLa
 from PySide2.QtGui import QPixmap, QIcon, Qt
 import random
 from PySide2.QtCore import Signal, QSize
+import os
+from pathlib import Path
 
 
 class View(QMainWindow):
@@ -17,8 +19,14 @@ class View(QMainWindow):
 
         self.setWindowTitle("Lie Detection Protocol")
         self.showFullScreen()
-        self.symbols_pathnames = ["src/dog.png", "src/axe.png", "src/aircraft.png", "src/battery.png", "src/brain.png", "src/phone.png",
-                                  "src/fish.png", "src/sun.png", "src/tree.png", "src/wave.png"]
+        BASE_DIR   = Path(__file__).resolve().parent          # folder containing this .py file
+        images_dir = BASE_DIR / "color_image_bank"            # works on Win, macOS, Linux
+        #images_dir = "C:/Users/user/Documents/BrainKybLab/Lab Protocols/Lie_detector/Lie_detector_Quentin/color_image_bank"
+        self.symbols_pathnames = [
+            os.path.join(images_dir, f)
+            for f in os.listdir(images_dir)
+            if f.endswith(".png") and not f.startswith("._")  
+            ]
 
         self.main_layout = QVBoxLayout()
         main_widget = QWidget()
@@ -46,6 +54,7 @@ class View(QMainWindow):
 
         random_image_path = random.choice(self.symbols_pathnames)
         self.image_label.pathname = random_image_path
+
 
         pixmap = QPixmap(random_image_path)
         scaled_pixmap = pixmap.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -83,6 +92,12 @@ class View(QMainWindow):
         """
         self.image_label.pathname = random_image_path
         pixmap = QPixmap(random_image_path)
+        if pixmap.isNull():
+            print(f"Failed to load image: {random_image_path}")
+            # Provide a fallback image or handle the error
+        else:
+            scaled_pixmap = pixmap.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.image_label.setPixmap(scaled_pixmap)
         self.image_label.setPixmap(pixmap)
         self.image_label.setAlignment(Qt.AlignCenter)
 
@@ -97,6 +112,12 @@ class View(QMainWindow):
 
         button_random.pathname = random_image_path
         pixmap1 = QPixmap(random_image_path)
+        if pixmap1.isNull():
+            print(f"Error: Failed to load image at {random_image_path}")
+            # Provide fallback image or handle error
+            
+        scaled_pixmap1 = pixmap1.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.image_label.setPixmap(scaled_pixmap1)
         icon1 = QIcon(pixmap1)
         button_random.setIcon(icon1)
 
@@ -107,6 +128,12 @@ class View(QMainWindow):
 
         other_button.pathname = pathname
         pixmap2 = QPixmap(pathname)
+        if pixmap2.isNull():
+            print(f"Error: Failed to load image at {random_image_path}")
+            # Provide fallback image or handle error
+            
+        scaled_pixmap2 = pixmap2.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.image_label.setPixmap(scaled_pixmap2)
         icon2 = QIcon(pixmap2)
         other_button.setIcon(icon2)
 
